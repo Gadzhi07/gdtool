@@ -1072,7 +1072,7 @@ while true
 	else if type == "userdel" then
 		output_ = userdel(computer, params)
 	else if type == "gnip" then
-		output = genRandomIp
+		output_ = genRandomIp
 	else
 		print("<color=red>" + type + " not found!")
 	end if
