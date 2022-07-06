@@ -24,7 +24,7 @@
 
 ### TODO:
 
-* **rnip {number} - command to output a random ip address**
+* **rnip - command to output a random ip address**
 
 * **The "|" operator, which can be used to display the output of the first command, accepting the input of the second command**
 
