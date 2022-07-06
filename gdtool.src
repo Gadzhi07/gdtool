@@ -1071,7 +1071,7 @@ while true
 		output_ = useradd(computer, params)
 	else if type == "userdel" then
 		output_ = userdel(computer, params)
-	else if type == "gnip" then
+	else if type == "rnip" then
 		output_ = genRandomIp
 	else
 		print("<color=red>" + type + " not found!")
