@@ -510,7 +510,6 @@ decipher = function(pass)
 end function
 
 // Command !
-// In the final part of this article, we will explain some useful ! (bang) operations:
 // !! – execute last command
 // !top – execute the most recent command that starts with ‘top’ (e.g. !)
 // !2  – running the second command from the command history
