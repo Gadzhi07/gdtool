@@ -6,8 +6,6 @@
 
 ### ЗАДАЧИ:
 
-* **rnip - команда для вывода случайного ip-адреса**
-
 * **Оператор "|", который может использоваться для отображения выходных данных первой команды, принимая входные данные второй команды**
 
 * **Оператор "&", который выполняет указанные команды в фоновом режиме**
@@ -23,8 +21,6 @@
 **If you make changes to the script, then create a fork of the repository on Github.**
 
 ### TODO:
-
-* **rnip - command to output a random ip address**
 
 * **The "|" operator, which can be used to display the output of the first command, accepting the input of the second command**
 
