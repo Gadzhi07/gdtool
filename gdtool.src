@@ -946,6 +946,16 @@ secureS = function(comp)
 	comp.File("/usr/bin/Terminal.exe").chmod("g+x")
 end function
 
+genRandomIp = function()
+    while true //loop
+        ip = floor((rnd * 255) + 1) + "." + floor((rnd * 255) + 1) + "." + floor((rnd * 255) + 1) + "." + floor((rnd * 255) + 1) //Generate a random ip
+        if not is_valid_ip(ip) then continue //If the ip is invalid, try again
+        if is_lan_ip(ip) then continue //If the ip is a lan ip, try again
+        //if not get_router(ip) then continue //do not check for this cause most of the time there will be a router and this slows down the process A LOT
+        return ip //If the ip is valid, break out of the loop
+    end while
+end function //Generate random IP
+
 metaxploit = include_lib("/lib/metaxploit.so")
 metaxploit_path = "/lib/metaxploit.so"
 if not metaxploit then
@@ -1061,6 +1071,8 @@ while true
 		output_ = useradd(computer, params)
 	else if type == "userdel" then
 		output_ = userdel(computer, params)
+	else if type == "rnip" then
+		output_ = genRandomIp
 	else
 		print("<color=red>" + type + " not found!")
 	end if
