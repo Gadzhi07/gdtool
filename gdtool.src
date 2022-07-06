@@ -1,0 +1,1073 @@
+// Creator: Gadzhi#2257
+// If you make changes to the script, then share the code or create a fork of the repository on Github.
+
+set_password = "gdtool"																																	
+
+cd = function(computer, params)
+	if current_path[len(current_path)-1:] != "/" then current_path = current_path + "/"
+	if params[0] == ".." then
+		params[0] = "/"
+		path_split = current_path.split("/")
+		folders = path_split[1:len(path_split)-2]
+		for folder in folders
+			params[0] = params[0] + folder + "/"
+		end for
+	else 	if params[0][0] != "/" then 
+		params[0] = current_path + params[0]
+	end if
+	folder = computer.File(params[0])
+	if folder == null then
+		print("cd: No such directory")
+	//else if not folder.has_permission("r") then
+	//	print("cd: permission denied")
+	else
+		return params[0]
+	end if
+end function
+
+cat = function(computer, params)
+	//command: cat
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("cat_usage"))
+
+	if current_path[len(current_path)-1:] != "/" then current_path = current_path + "/"
+	if params[0][0] != "/" then params[0] = current_path + params[0]
+	pathFile = params[0]
+	file = computer.File(pathFile)
+
+	if file == null then return("cat: file not found: "+pathFile)
+	if file.is_binary then return("cat: can't open " + file.path + ". Binary file")	
+	//if not file.has_permission("r") then return("cat: permission denied")
+
+	print(file.get_content)
+end function
+
+chmod_ = function(computer, params)
+	//command: chmod
+	if params.len < 2 or (params.len == 3 and params[0] != "-R") then return(command_info("chmod_usage"))
+
+	permissions = params[0]
+	pathFile = params[1]
+	isRecursive = 0
+
+	if params.len == 3 then
+	    permissions = params[1]
+		pathFile = params[2]
+		isRecursive = 1
+	end if
+
+	file = computer.File(pathFile)
+	if file == null then return("chmod: can't find " + pathFile)
+	output = file.chmod(permissions, isRecursive)
+	if output then print(output)
+end function
+
+chown = function(computer, params)
+	//command: chown
+	if params.len < 2 or (params.len == 3 and params[0] != "-R") then return(command_info("chown_usage"))
+
+	owner = params[0]
+	pathFile = params[1]
+	isRecursive = 0
+
+	if params.len == 3 then
+	    owner = params[1]
+	    pathFile = params[2]
+	    isRecursive = 1
+	end if
+
+	file = computer.File(pathFile)
+	if file == null then return("chown: file not found: "+pathFile)
+	output = file.set_owner(owner, isRecursive)
+	if output then print(output)
+end function
+
+cp = function(computer, params)
+	//command: cp
+	if params.len != 2 or params[0] == "-h" or params[0] == "--help" then return(command_info("cp_usage"))
+
+	origFile = params[0]
+	destFolder = params[1]
+
+	file = computer.File(origFile)
+	if not file then return("cp: can't find " + origFile)
+
+	newName = ""
+	folder = computer.File(destFolder)
+	if not folder then
+		//Check if the user wants to put a new name.
+		pathParent = parent_path(destFolder)
+						
+		if pathParent == destFolder then			
+			newName = destFolder
+			destFolder = file.parent.path		
+			output = file.copy(destFolder, newName)
+			if output and output != 1 then print(output)
+			return
+		end if	
+
+		folder = computer.File(pathParent)
+		newName = destFolder[destFolder.len - (destFolder.len - pathParent.len):]			
+		if newName[0] == "/" then
+			newName = newName[1:]
+		end if
+		if not folder then return("cp: can't copy file. " + destFolder + " doesn't exist.")
+		
+	end if
+
+	if folder then
+		//Check if is trying to copy the file on itself. Ignored.
+		if file.parent.path != folder.parent.path or file.name != folder.name then
+			finalDest = folder.path
+			if(newName.len == 0) then
+				newName = file.name
+			end if
+			if not folder.is_folder then			
+				finalDest = file.parent.path
+				newName = folder.name
+			end if
+			output = file.copy(finalDest, newName)
+			if output and output != 1 then print(output)
+		end if
+	end if
+end function
+
+groups_ = function(computer, params)
+	//command: groups
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("groups_usage"))
+	user = params[0]
+	output = computer.groups(user)
+	if not output then return(command_info("groups_usage"))
+	print(output)
+end function
+
+ifconfig = function(computer, params)
+	//command: ifconfig
+	if params.len != 0 and (params.len != 4 or params[0] == "-h" or params[0] == "--help") then return(command_info("ifconfig_usage"))
+	if (params.len == 0) then
+		router = get_router
+		if ip then router = get_router(ip)   
+		if computer.is_network_active and router then
+		    if computer.local_ip then lip = computer.local_ip
+			if router.public_ip then pip = router.public_ip
+	    	if computer.network_gateway then gw = computer.network_gateway
+		    if computer.active_net_card == "WIFI" then		    
+			    output = "\nConnected to Wi-Fi:\nEssid: " + router.essid_name + "\nBssid: " + router.bssid_name
+			else
+			    output = "\nEthernet connection:"    
+			end if
+		else
+			lip = "0.0.0.0"
+			pip = "0.0.0.0"
+			gw = "0.0.0.0"
+			output = "\nNot connected to the network."
+		end if
+		print( output + "\n----------------\nPublic IP: " + pip + "\nLocal IP: " + lip + "\nGateway: " + gw + "\n")
+	else 
+		if params[2] != "gateway" then return(command_info("ifconfig_usage"))
+		device = params[0]
+		address = params[1]
+		gateway = params[3]
+		if not is_valid_ip(address) then return("ifconfig: invalid ip address")
+		if not is_valid_ip(gateway) then return("ifconfig: invalid gateway")
+		output = computer.connect_ethernet(device, address, gateway)
+		if output.len > 0 then print(output)
+	end if
+end function
+
+kill = function(computer, params)
+	//command: kill
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("kill_usage"))
+	PID = params[0].to_int
+	if typeof(PID) != "number" then return("The PID must be a number\n" + command_info("kill_usage"))
+
+	output = computer.close_program(PID)
+	if output == true then return("Process " + PID + " closed");
+	if output then return(output)
+	print("Process " + PID + " not found")
+end function
+
+ls = function(computer, params)
+	//command: ls
+	ValidateInput = function(input)
+		if input == "-la" or input == "-l" or input == "-a" then return true
+		return false
+	end function 
+	if params.len > 3 or (params.len == 1 and params[0].indexOf("-") != null and not ValidateInput(params[0])) or (params.len == 2 and not ValidateInput(params[0])) or (params.len == 3 and (not ValidateInput(params[0]) or not ValidateInput(params[1]))) then
+		print(command_info("ls_usage"))
+		
+	else
+		folderPath = current_path
+		if params and params[params.len - 1].indexOf("-") == null then
+			folderPath = params[params.len - 1]
+		end if
+		folder = computer.File(folderPath)
+		if folder == null then
+			print("ls: No such file or directory")
+		else
+			//if not folder.has_permission("r") then
+			//	print("ls: permission denied")
+
+			//else
+			showHide = 0
+			if params and params[0].indexOf("a") != null then
+				showHide = 1
+			end if
+			showDetails = 0
+			if params and params[0].indexOf("l") != null then
+				showDetails = 1
+			end if
+			subFiles = folder.get_folders + folder.get_files
+			output = ""
+			for subFile in subFiles
+				nameFile = subFile.name
+				permission = subFile.permissions
+				owner = subFile.owner
+				size = subFile.size
+				group = subFile.group
+
+				if showHide or nameFile.indexOf(".") != 0 then
+					if output.len > 0 then 
+						output = output + "\n"
+					end if
+					if showDetails then
+						output = output + permission + " " + owner + " " + group + " " + size + " 00:00 " + nameFile
+					else
+						output = output + nameFile
+					end if
+				end if
+			end for
+			print(format_columns(output))
+		end if
+	end if
+end function
+
+mkdir = function(computer, params)
+	//command: mkdir
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then
+		print(command_info("mkdir_usage"))
+	else
+		pathFile = params[0]
+		pathParent = parent_path(pathFile)
+		existFile = computer.File(pathFile)
+		
+		if pathParent == pathFile then
+			pathParent = current_path
+		end if
+
+		parent = computer.File(pathParent)
+		if parent == null then
+			print("mkdir: " + pathParent + " not found")
+
+		else if existFile != null then
+			print("mkdir: " + existFile.path + " file exists")
+
+		//else if not parent.has_permission("w") then
+		//	print("mkdir: permission denied")
+
+		else
+			arrayPath = pathFile.split("/")
+			output = computer.create_folder(parent.path, arrayPath[arrayPath.len - 1])
+			if output != null and output != 1 then
+				print(output)
+			end if 
+		end if
+	end if
+end function
+
+mv = function(computer, params)
+	//command: mv
+	if params.len != 2 then
+		print(command_info("mv_usage"))
+	else
+		origFile = params[0]
+		destFolder = params[1]
+		file = computer.File(origFile)
+		if file == null then
+			print("mv: can't find " + origFile)
+		else
+			newName = ""
+			folder = computer.File(destFolder)
+			if folder == null then
+				//Check if the user wants to put a new name.
+				pathParent = parent_path(destFolder)
+				if pathParent == destFolder then			
+					newName = destFolder
+					destFolder = file.parent.path		
+					file.move(destFolder, newName)
+				else
+					folder = computer.File(pathParent)
+					newName = destFolder[destFolder.len - (destFolder.len - pathParent.len):]			
+					if newName[0] == "/" then
+						newName = newName[1:]
+					end if
+					if folder == null then				
+						print("mv: can't copy file. " + destFolder + " doesn't exist.")
+					end if			
+				end if
+			end if
+			if folder != null then
+				//Check if is trying to copy the file on itself. Ignored.
+				if file.parent.path != folder.parent.path or file.name != folder.name then
+					finalDest = folder.path
+					if(newName.len == 0) then
+						newName = file.name
+					end if
+					if not folder.is_folder then			
+						finalDest = file.parent.path
+						newName = folder.name
+					end if
+					if file.parent.path == folder.parent.path and newName != file.name then
+						file.rename(newName)
+					else
+						file.move(finalDest, newName)
+					end if
+				end if
+			end if
+		end if
+	end if
+end function
+
+passwd = function(computer, params)
+	//command: passwd
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("passwd_usage"))
+
+	inputMsg = "Changing password for user " + params[0] +".\nNew password:"
+	inputPass = user_input(inputMsg, true)
+
+	output = computer.change_password(params[0], inputPass)
+	if output == true then return("password modified OK")
+	if output then return(output)
+	print("Error: password not modified")
+end function
+
+ping_ = function(shell, params)
+	//Command: ping
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("ping_usage"))
+	result = shell.ping(params[0])
+	if result then
+	    if typeof(result) == "string" then
+	        print(result) 
+		else
+		    print("Ping successful")
+		end if
+	else
+		print("ip unreachable");
+	end if
+end function
+
+ps = function(computer, params)
+	//command: ps
+	if params.len > 0 then return(command_info("ps_usage"))
+	output = computer.show_procs
+	print(format_columns(output))
+end function
+
+pwd = function(params)
+	//command: pwd
+	print(current_path)
+end function
+
+rm = function(computer, params)
+	//command: rm
+	if params.len < 1 or params.len > 2 or params[0] == "-h" or params[0] == "--help" then return(command_info("rm_usage"))
+
+	pathFile = params[0]
+	isRecursive = 0
+	if params[0] == "-r" then
+		if params.len == 1 then return(command_info("rm_usage"))
+		isRecursive = 1
+		pathFile = params[1]
+	end if
+	file = computer.File(pathFile)
+		
+	if file == null then return("rm: file not found: "+pathFile)
+	//if not file.has_permission("w") then return("rm: permission denied")
+
+	if file.is_folder == 1 and isRecursive == 0 then
+		print("rm: " + file.name + " is a directory")
+	else
+		output = file.delete
+		if output.len > 0 then print(output)
+	end if
+end function
+
+touch_ = function(computer, params)
+	//command: touch
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("touch_usage"))
+
+	pathFile = params[0]
+	pathParent = parent_path(pathFile)
+	
+	if pathParent == pathFile then
+		pathParent = current_path
+	end if
+
+	parent = computer.File(pathParent)
+
+	if not parent then return("touch: " + pathParent + " not found")
+	//if not parent.has_permission("w") then return("touch: permission denied")
+
+	arrayPath = pathFile.split("/")
+	output = computer.touch(parent.path, arrayPath[arrayPath.len - 1])
+	if output and output != 1 then print(output)
+end function
+
+useradd = function(computer, params)
+	//command: useradd
+	if params.len != 1 or params[0] == "-h" or params[0] == "--help" then return(command_info("useradd_usage"))
+
+	inputMsg = "Setting password for user " + params[0] +".\nNew password: "
+	inputPass = user_input(inputMsg, true)
+
+	output = computer.create_user(params[0], inputPass)
+	if output == true then return("User created OK")
+	if output then return(output)
+	print("Error: the user could not be created.")
+end function
+
+userdel = function(computer, params)
+	//command: userdel
+	if not params.len or (params.len == 1 and params[0] == "-r") or params[0] == "-h" or params[0] == "--help" then return(command_info("userdel_usage"))
+
+	delete = 0
+	if params[0] == "-r" then
+	  delete = 1
+	  params.pull
+	end if
+
+	output = computer.delete_user(params[0], delete)
+	if output == true then return("user " + params[0] + " deleted.")
+	if output then return(output)
+	print("Error: user not deleted.")
+end function
+
+ssh = function(params)
+	//Command: ssh
+    if params.len < 2 or params.len > 3 then exit(command_info("ssh_usage"))
+    credentials = params[0].split("@")
+    user = credentials[0]
+    password = credentials[1]
+
+    port = 22
+    // params is a list of strings, so you have to convert it to integer, which is what connect_service accepts.
+    if params.len == 3 then port = params[2].to_int
+    if typeof(port) != "number" then return "Invalid port: " + port
+    print("Connecting...")
+
+    shell = get_shell.connect_service(params[1], port, user, password, "ssh")
+    if typeof(shell) == "string" then return shell
+    if shell then 
+        return shell
+    else 
+        print("connection failed")
+    end if
+end function
+
+// Cleaning logs
+clean_log = function(comp)
+	log = comp.File("/var/system.log")
+	if not log then return "<color=red>Error: log file not found!"
+	output = log.move("/boot/.temp", ".kernel")
+	if output == "permission denied" then
+		return "<color=red>Error: permission denied for log file!"
+	else if output != 1 then
+		if output == "/boot/.temp not found" then
+			comp.create_folder("/boot/", ".temp")
+			output = log.move("/boot/.temp", ".kernel")
+		else
+			return output
+		end if
+	end if
+	output = comp.touch("/var", "system.log")
+	if output != 1 then print("<color=red>Error: " + output)
+	
+	log = comp.File("/var/system.log")
+	if not log then return "<color=red>Error: log file not found!"
+	output = log.move("/boot/.temp", ".kernel")
+	if output == "permission denied" then
+		return "<color=red>Error: permission denied for log file!"
+	else if output != 1 then
+		if output == "/boot/.temp not found" then
+			comp.create_folder("/boot/", ".temp")
+			output = log.move("/boot/.temp", ".kernel")
+		else
+			return output
+		end if
+	end if
+
+	output = comp.touch("/var", "system.log")
+	if output != 1 then print("<color=red>Error: " + output)
+	if output == 1 then print("<color=green>log cleared!")
+end function
+
+decipher = function(pass)
+	if pass.split(":").len == 2 then
+		password = crypto.decipher(pass[1])
+		print(password)
+	else
+		password = crypto.decipher(pass)
+		print(password)
+end function
+
+// Command !
+// In the final part of this article, we will explain some useful ! (bang) operations:
+// !! – execute last command
+// !top – execute the most recent command that starts with ‘top’ (e.g. !)
+// !2  – running the second command from the command history
+find_in_history = function(type, params)
+	command = null
+	if type[1] == "!" and len(history) > 0 then
+		command = history[-1]
+	else if type[1:].val != 0 and len(history) >= 2 and type[1:].val < len(history) then
+		command = history[type[1:].val]
+	else if len(history) > 0 and type[1:].val == 0 then
+		for i in range(1, len(history))
+			command = history[-i]
+			if type[1:].lower != command.split(" ")[0].lower then continue
+			break
+		end for
+	end if
+	if command then
+		print(command)
+		return command
+	end if
+end function
+
+// echo command to output environment variables
+echo = function(params)
+	firstParam = params[0]
+	if firstParam == "envVars" then
+		for envVar in envVars
+			print(envVar)
+		end for
+	else if firstParam == "history" then
+		for command in history
+			print(command)
+		end for
+	else if firstParam == "ip" then
+		return ip
+	end if
+	if str(firstParam[0]) == "$" then
+		var = firstParam[1:]
+		if envVars.hasIndex(var) then
+			return envVars[var]
+		else
+			return "<color=red>" + var + " не найден!!!"
+		end if
+	end if
+end function
+
+// writing a variable to environment variables
+writeVars = function(type)
+	key = type.split("=")[0]
+	value = type.split("=")[1]
+	envVars = envVars + {key: value}
+	return envVars 
+end function
+
+GetPassword = function(userPass)
+	if userPass.len != 2 then return "decipher: " + file.path + " wrong syntax"
+	password = crypto.decipher(userPass[1])
+	return password
+end function
+
+// Installing the script on another server
+InstallScript = function()
+	output = get_shell.scp(metaxploit_path, "/home/guest", shell)
+	if output != true then print(output)
+	output = get_shell.scp(crypto_path, "/home/guest", shell)
+	if output != true then print(output)
+	output = get_shell.scp(current_path + "/gdtool", "/home/guest", shell)
+	if output != true then print(output)
+end function
+
+decipher_passwd = function(file)
+	listUsers = file.get_content.split("\n")
+	for line in listUsers
+		userPass = line.split(":")
+		if userPass[0] == "" then continue
+		
+		password = GetPassword(userPass)
+		if not password then 
+			print("<color=red>Nothing found in /etc/passwd...")
+		else
+			print("=> <color=blue>" + userPass[0])
+			print("=> <color=blue>" + password)
+			return [userPass[0], password]
+		end if
+	end for
+end function
+
+nmap = function(router)
+	open_ports = []
+	info = " <#D06B05>TYPE PORT STATE SERVICE VERSION LAN"
+	info = info + "\n <#04b7f3>Router 0 open router " + router.kernel_version + " " + router.local_ip + " true"
+	open_ports.push(0)
+	lans = router.devices_lan_ip
+	if not isLanIp then
+	   u_ports = router.used_ports
+	else
+	   u_ports = router.device_ports(ip)
+	end if
+	u_lans = []
+	for port in u_ports
+		u_lans.push(port.get_lan_ip)
+	end for
+	results = []
+	lan_ports = router.used_ports
+
+	print("-<b>ports</b>--------------------------")
+	for lan in lans
+		lan_ports = router.device_ports(lan)
+		if lan_ports then
+			for port in lan_ports
+				lan = port.get_lan_ip
+				c = false
+				for res in results
+					if lan == res then
+						c = true
+						break
+					end if
+				end for
+				if c then continue
+				type = "Server"
+				if (lan.split(".")[2] != router.local_ip.split(".")[2] and port.port_number == 8080) or lan == router.local_ip or port.port_number == 8080 then type = "Subnet"
+				service_info = router.port_info(port)
+				for p in lan_ports
+					if p.port_number == 37777 then type = "Cam"
+				end for
+				connect = "false"
+				for ul in u_lans
+					if ul == lan then
+						connect = "true"
+					end if
+				end for
+				if lan == router.local_ip then connect = "true"
+			
+				port_status = "open"
+				if(port.is_closed and not isLanIp) then port_status = "closed"
+			
+				if type == "Server" or type == "Cam" then
+					if port_status == "open" then info = info + "\n <#05e365>" + type + " " + port.port_number + " " + port_status + " " + service_info + " " + lan + " " + connect
+					if port_status == "closed" then info = info + "\n <#d00505>" + type + " " + port.port_number + " " + port_status + " " + service_info + " " + lan + " " + connect
+				else
+					info = info + "\n <#f5e294>" + type + " " + port.port_number + " " + port_status + " " + service_info + " " + lan + " " + connect
+				end if
+				open_ports.push(port.port_number)
+			end for
+		else
+			type = "Computer"
+			info = info + "\n <#ca45ff>" + type + " ### ### ### #### " + lan + " ####"
+		end if
+		results.push(lan)
+	end for
+	print(format_columns(info))
+	print("-<b>firewall</b>--------------------------")
+	info = "<#D06B05> ACTION PORT SOURCE_IP DESTINATION_IP"
+	firewalls = router.firewall_rules
+	if firewalls.len < 1 then
+		print("<#05e365> No firewall rules.")
+	else
+		for fw in firewalls
+			action = fw.split(" ")[0]
+			if action == "ALLOW" then info = info + "\n<#05e365> " + fw
+			if action == "DENY" then info = info + "\n<#d00505> " + fw
+		end for
+		print(format_columns(info))
+	end if
+	print("----------------------------------\n")
+	return open_ports
+end function
+
+// hacking ports
+hack_ports = function(ip, open_ports)
+	info = "<#D06B05> ID MEM VALUE TYPE"
+	id = 0
+	hack_info = []
+	for port in open_ports
+		print("trying <b>" + port)
+		net_session = metaxploit.net_use(ip, port)
+		if not net_session then continue
+		
+		metaLib = net_session.dump_lib
+		memory = metaxploit.scan(metaLib)
+		for mem in memory
+			address = metaxploit.scan_address(metaLib, mem)
+			address = metaxploit.scan_address(metaLib, mem).split("Unsafe check: ")
+			for add in address
+				if add == address[0] then continue
+				value = add[add.indexOf("<b>")+3:add.indexOf("</b>")]
+				value = value.replace("\n", "")
+				result = metaLib.overflow(mem, value)
+				print("<color=green>" + mem + " -> " + value)
+				if not result then continue
+				print("<color=green>Type: " + typeof(result))
+				hack_info.push([result, str(mem), str(value)])
+				info = info + "\n<#05e365> " + id + " " + mem + " " + value + " " + typeof(result)
+				id = id + 1
+			end for
+		end for
+	end for
+	print(format_columns(info))
+	return hack_info
+end function
+
+// hacking local libraries
+local_hack = function(comp)
+	libs = comp.File("/lib").get_files
+	metalibs = []
+	for lib in libs
+		if lib.name == "init.so" then metalibs.push(lib.name)
+		if lib.name == "kernel_module.so" then metalibs.push(lib.name)
+		if lib.name == "net.so" then metalibs.push(lib.name)
+		if lib.name == "aptclient.so" then metalibs.push(lib.name)
+		if lib.name == "crypto.so" then metalibs.push(lib.name)
+		if lib.name == "metaxploit.so" then metalibs.push(lib.name)
+	end for
+	if not metalibs then return "Error: libs not found!"
+	
+	info = "<#D06B05> ID MEM VALUE TYPE"
+	id = 0
+	hack_info = []
+	for meta in metalibs
+		print("\nHacking <b>"+meta)
+		
+		metaLib = metaxploit.load("/lib/"+meta)
+		memory = metaxploit.scan(metaLib)
+		
+		for mem in memory
+			address = metaxploit.scan_address(metaLib, mem)
+			address = metaxploit.scan_address(metaLib, mem).split("Unsafe check: ")
+			for add in address
+				if add == address[0] then continue
+				value = add[add.indexOf("<b>")+3:add.indexOf("</b>")]
+				value = value.replace("\n", "")
+				result = metaLib.overflow(mem, value)
+				print("<color=green>" + mem + " -> " + value)
+				if not result then continue
+				print("<color=green>Type: " + typeof(result))
+				hack_info.push([result, str(mem), str(value)])
+				info = info + "\n<#05e365> " + id + " " + mem + " " + value + " " + typeof(result)
+				id = id + 1
+			end for
+		end for
+	end for
+	info = info + "\n<#05e365> all"
+	print(format_columns(info))
+	return hack_info
+end function
+
+// hacking a shell object
+hack_shell = function(ip, shell)
+	comp = shell.host_computer
+	passwd_file = comp.File("/etc/passwd")
+	if passwd_file and passwd_file.has_permission("r") then
+		print("<color=green>Decryption /etc/passwd")
+		UserPassword = decipher_passwd(passwd_file)
+		enter = user_input("Войти по ssh? Y/n [Enter=y] : ")
+		if enter == "" or enter.lower == "y" then
+			shell = shell.connect_service(ip, 22, UserPassword[0], UserPassword[1])
+		else
+			break
+		end if
+	end if
+	current_path = "/"
+	return shell
+end function
+
+// hacking a comp object
+hack_comp = function(ip, comp)
+	passwd_file = comp.File("/etc/passwd")
+	if passwd_file and passwd_file.has_permission("r") then
+		print("<color=green>Decryption /etc/passwd")
+		UserPassword = decipher_passwd(passwd_file)
+		enter = user_input("Войти по ssh? Y/n [Enter=y] : ")
+		if enter == "" or enter.lower == "y" then
+			shell = get_shell.connect_service(ip, 22, UserPassword[0], UserPassword[1])
+			return shell
+		else
+			break
+		end if
+	end if
+	current_path = "/"
+	return comp
+end function
+
+// hacking a file object
+hack_file = function(file)
+	print("<color=green>hack_file ===> start")
+	cont = null
+	print("File/Folder path: " + file.path)
+	if not file.is_binary then
+		cont = file.get_content
+		print(cont)
+	end if
+
+	if not cont then
+		files = file.get_files
+		folders = file.get_folders
+		for file_ in files
+			print("File: " + file_.name)
+			if not file_.is_binary then print("Content: " + file_.get_content)
+		end for
+	
+		for folder in folders
+			print("Folder: " + folder.name)
+		end for
+	end if	
+end function
+
+// hacking a number object
+// Sometimes it doesn't work and gives an error
+hack_number = function(mem, value)
+	print("<color=green>Set password: " + set_password)
+	metaxploit.overflow(mem, value, set_password)
+end function
+
+// start hacking server
+hackServer = function(ip, hack)
+	if len(ip.split("www")) >= 2 then ip = nslookup(ip)
+	isLanIp = is_lan_ip(ip)
+
+	if isLanIp then
+		router = get_router
+	else
+		if is_valid_ip(ip) then router = get_router(ip)
+	end if
+
+	if router == null then
+		print("<color=red>ip address not found")
+	else
+		open_ports = nmap(router)
+		if hack then return hack_ports(ip, open_ports)
+	end if
+end function
+
+// exploiting vulnerabilities
+use = function(id)
+	if hack_info == [] then return "<color=red>you didn't start hacking"
+	if id > len(hack_info) - 1 then return "<color=red>...."
+	if typeof(hack_info[id][0]) == "shell" then return hack_shell(ip, hack_info[id][0])
+	if typeof(hack_info[id][0]) == "computer" then return hack_comp(ip, hack_info[id][0])
+	if typeof(hack_info[id][0]) == "file" then hack_file(hack_info[id][0])
+	if typeof(hack_info[id][0]) == "number" then hack_number(hack_info[id][1], hack_info[id][2])
+	if id == "all" then
+		for hack in hack_info
+			if typeof(hack[0]) == "shell" then return hack_shell(ip, hack[0])
+			if typeof(hack[0]) == "computer" then return hack_comp(ip, hack[0])
+			if typeof(hack[0]) == "file" then hack_file(hack[0])
+			if typeof(hack[0]) == "number" then hack_number(hack[1], hack[2])
+		end for
+	end if
+end function
+
+// system protection
+secureS = function(comp)
+	pwd = comp.File("/etc/passwd")
+	if not pwd == null and pwd.has_permission("r") and pwd.has_permission("w") then
+		con = pwd.get_content
+		lines = con.split(char(10))
+		nc = ""
+		sep = ""
+		for line in lines
+			lsp = line.split(":")
+			if lsp.len >= 2 then
+				user = lsp[0]
+				hash = lsp[1]
+				nc=nc+sep+ user+":"+md5(hash)
+				sep = char(10)
+			end if
+		end for
+		
+		pwd.set_content(nc)
+	end if
+
+	sshd = comp.File("/server/conf/sshd.conf")
+	if sshd and sshd.has_permission("w") then
+		t = "{""encryption_enabled"": true,"+char(10)+"""message_encrypted_conn"": true,"+char(10)+"""path_enc"": ""/server/encode.src"","+char(10)+"""path_dec"": ""/server/decode.bin"""+char(10)+"}"
+		sshd.set_content(t)
+	end if
+
+	gues = comp.File("/home/guest")
+	if not gues == null then
+		gues.delete
+	end if
+
+	crypt = comp.File("/lib/crypto.so")
+	if not crypt == null then
+		crypt.move("/root","crypto.so")
+	end if
+	
+	home = comp.File("/home")
+	if home != null then
+		for user in home.get_folders
+			if user.name == "root" then
+				for file in user.get_files
+					file.move("/root",file.name)
+				end for
+
+				for folder in user.get_folders
+					for file in folder.get_files
+						file.move("/root/"+folder.name,file.name)
+					end for
+				end for
+
+				user.delete
+			else
+				for file in user.get_files
+					file.move("/root",file.name)
+				end for
+
+				for folder in user.get_folders
+					if folder.name == "Desktop" then
+						for file in folder.get_files
+							if file.name != "Terminal" then
+								file.move("/root/"+folder.name,file.name)
+							end if
+						end for
+					else
+						for file in folder.get_files
+							file.move("/root/"+folder.name,file.name)
+						end for
+					end if
+				end for
+			end if
+		end for
+	end if
+	
+	clean_log(comp)
+	
+	comp.File("/").set_owner("root",1)
+	comp.File("/").set_group("root",1)
+	comp.File("/").chmod("o-wrx",1)
+	comp.File("/").chmod("u-wrx",1)
+	comp.File("/").chmod("g-wrx",1)
+	
+	comp.File("/bin/sudo").chmod("g+x")
+	comp.File("/usr/bin/Terminal.exe").chmod("g+x")
+end function
+
+metaxploit = include_lib("/lib/metaxploit.so")
+metaxploit_path = "/lib/metaxploit.so"
+if not metaxploit then
+	metaxploit = include_lib(current_path + "/metaxploit.so")
+	metaxploit_path = current_path + "/metaxploit.so"
+end if
+if not metaxploit then exit("Error: Can't find metaxploit library in the /lib path or the current folder")
+
+crypto = include_lib("/lib/crypto.so")
+crypto_path = "/lib/crypto.so"
+if not crypto then 
+	crypto = include_lib(current_path + "/crypto.so")
+	crypto_path = current_path + "/crypto.so"
+end if
+if not crypto then exit("Error: Can't find crypto library in the /lib path or the current folder")
+
+shell = get_shell
+computer = shell.host_computer
+hack_info = []
+ip = null
+ask = "<color=blue>Shell</color>:<color=white>"+ active_user +"<color=yellow>@<color=orange>" + computer.public_ip + "<color=white>-<color=orange>" + computer.local_ip
+history = []
+envVars = {}
+while true
+	f_enter = user_input(ask + "\n$ ")
+	if f_enter.split(" ")[0].lower[0] == "!" and len(f_enter.split(" ")[0].lower) > 1 then
+		f_enter = find_in_history(f_enter.split(" ")[0].lower, f_enter.split(" ")[1:])
+	else
+		history.push(f_enter)
+	end if
+	output_ = null
+	entersplit = f_enter.split(" ")
+	type = entersplit[0].lower
+	params = entersplit[1:]
+	if type == "exit" then
+		exit
+	else if type == "local" then
+		ip = computer.public_ip
+		hack_info = local_hack(computer)
+	else if type == "hack" then
+		ip = params[0]
+		hack_info = hackServer(params[0], true)
+	else if type == "use" then
+		out_info = use(params[0].val)
+		if typeof(out_info) == "shell" then
+			shell = out_info
+			computer = shell.host_computer
+			ask = "<color=blue>Shell</color>:<color=white>"+ active_user +"<color=yellow>@<color=orange>" + computer.public_ip + "<color=white>-<color=orange>" + computer.local_ip
+		else if typeof(out_info) == "computer" then
+			computer = out_info
+			ask = "<color=blue>Computer</color>:<color=white>"+ active_user +"<color=yellow>@<color=orange>" + computer.public_ip + "<color=white>-<color=orange>" + computer.local_ip
+		end if
+	else if type == "ssh" then
+		out_info = ssh(params)
+		if typeof(out_info) == "shell" then
+			shell = out_info
+			computer = shell.host_computer
+			ask = "<color=blue>Shell</color>:<color=white>"+ active_user +"<color=yellow>@<color=orange>" + computer.public_ip + "<color=white>-<color=orange>" + computer.local_ip
+		end if
+	else if type == "nmap" then
+		hackServer(params[0], false)
+	else if type == "secures" then
+		secureS(computer)
+	else if type == "cleanlog" then
+		output_ = clean_log(computer)
+	else if type == "terminal" then
+		shell.start_terminal
+	else if type == "decipher" then
+		decipher(params[0])
+	else if len(type.split("=")) == 2 then
+		envVars = writeVars(type)
+	else if type == "echo" then
+		output_ = echo(params)
+	
+	else if type == "clear" then
+		clear_screen
+		
+	else if type == "cd" then
+		current_path = cd(computer, params)
+	else if type == "cat" then
+		output_ = cat(computer, params)
+	else if type == "chmod" then
+		output_ = chmod_(computer, params)
+	else if type == "chown" then
+		output_ = chown(computer, params)
+	else if type == "cp" then
+		output_ = cp(computer, params)
+	else if type == "groups" then
+		output_ = groups_(computer, params)
+	else if type == "ifconfig" then
+		output_ = ifconfig(computer, params)
+	else if type == "kill" then
+		output_ = kill(computer, params)
+	else if type == "ls" then
+		output_ = ls(computer, params)
+	else if type == "mkdir" then
+		output_ = mkdir(computer, params)
+	else if type == "mv" then
+		output_ = mv(computer, params)
+	else if type == "passwd" then
+		output_ = passwd(computer, params)
+	else if type == "ping" then
+		output_ = ping_(shell, params)
+	else if type == "ps" then
+		output_ = ps(computer, params)
+	else if type == "pwd" then
+		pwd(params)
+	else if type == "rm" then
+		output_ = rm(computer, params)
+	else if type == "touch" then
+		output_ = touch_(computer, params)
+	else if type == "useradd" then
+		output_ = useradd(computer, params)
+	else if type == "userdel" then
+		output_ = userdel(computer, params)
+	else
+		print("<color=red>" + type + " not found!")
+	end if
+	if typeof(output_) == "shell" then
+		shell = output_
+		computer = shell.host_computer
+	end if
+	if output_ and typeof(output_) == "string" then print(output_)
+end while
